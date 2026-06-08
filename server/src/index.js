@@ -49,10 +49,10 @@ app.use('/api/grades', gradeRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/projects', projectRoutes);
 
-app.use(express.static(path.join(process.cwd(), 'dist')));
+app.use(express.static(path.join(process.cwd(), '..', 'dist')));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+  res.sendFile(path.join(process.cwd(), '..', 'dist', 'index.html'));
 });
 
 app.use(notFoundHandler);
