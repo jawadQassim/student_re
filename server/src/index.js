@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 import cors from 'cors';
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import classRoutes from './routes/classes.js';
 import gradeRoutes from './routes/grades.js';
@@ -20,6 +22,7 @@ if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is required.');
 }
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? '4000', 10);
 
@@ -45,6 +48,14 @@ app.use('/api/classes', classRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/projects', projectRoutes);
+
+// تقديم ملفات Frontend
+app.use(express.static(path.join(__dirname, '../../dist')));
+
+// fallback للـ React Router
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../dist/index.html'));
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);
