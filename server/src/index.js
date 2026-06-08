@@ -49,12 +49,10 @@ app.use('/api/grades', gradeRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/projects', projectRoutes);
 
-// تقديم ملفات Frontend
-app.use(express.static(path.join(__dirname, '../../dist')));
+app.use(express.static(path.join(process.cwd(), 'dist')));
 
-// fallback للـ React Router
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../dist/index.html'));
+  res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
 });
 
 app.use(notFoundHandler);
