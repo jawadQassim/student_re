@@ -121,21 +121,21 @@ function AdminPanel({ activeSectionId }) {
     });
   };
 
-  const handleSaveUser = (formData) => {
+  const handleSaveUser = async (formData) => {
     if (userModalState?.mode === 'edit' && userModalState.user) {
-      updateUser(userModalState.user.id, formData);
+      await updateUser(userModalState.user.id, formData);
     } else {
-      createUser(formData);
+      await createUser(formData);
     }
 
     setUserModalState(null);
   };
 
-  const handleSaveClass = (formData) => {
+  const handleSaveClass = async (formData) => {
     if (classModalState?.mode === 'edit' && classModalState.classItem) {
-      updateClass(classModalState.classItem.id, formData);
+      await updateClass(classModalState.classItem.id, formData);
     } else {
-      createClass(formData);
+      await createClass(formData);
     }
 
     setClassModalState(null);
@@ -144,15 +144,15 @@ function AdminPanel({ activeSectionId }) {
   const requestDeleteUser = (account) => {
     const message =
       account.role === 'Teacher'
-        ? `Delete ${account.name}'s account? Any classes, grades, and timetable entries tied to this teacher will be updated in state.`
-        : `Delete ${account.name}'s account? Their grade records and class roster assignments will be removed from state.`;
+        ? `Delete ${account.name}'s account? Any classes, grades, and timetable entries tied to this teacher will be updated in the database.`
+        : `Delete ${account.name}'s account? Their grade records and class roster assignments will be removed from the database.`;
 
     setConfirmationState({
       title: 'Delete account',
       message,
       confirmLabel: 'Delete account',
-      onConfirm: () => {
-        deleteUser(account.id);
+      onConfirm: async () => {
+        await deleteUser(account.id);
         setConfirmationState(null);
       },
     });
@@ -161,10 +161,10 @@ function AdminPanel({ activeSectionId }) {
   const requestDeleteClass = (classItem) => {
     setConfirmationState({
       title: 'Delete class',
-      message: `Delete ${classItem.subject} (${classItem.code})? This action removes the class from the dashboard state.`,
+      message: `Delete ${classItem.subject} (${classItem.code})? This action removes the class from the live database.`,
       confirmLabel: 'Delete class',
-      onConfirm: () => {
-        deleteClass(classItem.id);
+      onConfirm: async () => {
+        await deleteClass(classItem.id);
         setConfirmationState(null);
       },
     });
@@ -218,7 +218,7 @@ function AdminPanel({ activeSectionId }) {
           <div className="section-heading">
             <span className="eyebrow">Directory preview</span>
             <h3>Current users</h3>
-            <p>A quick view of the live user directory stored in React state.</p>
+            <p>A quick view of the live user directory synced from the backend.</p>
           </div>
 
           <div className="compact-list">
@@ -507,6 +507,7 @@ function AdminPanel({ activeSectionId }) {
 function UserModal({ eyebrow, initialUser, mode, onClose, onSubmit, users }) {
   const [formData, setFormData] = useState(getUserFormValues(initialUser));
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = (event) => {
     const { name, value } = event.target;
@@ -517,7 +518,7 @@ function UserModal({ eyebrow, initialUser, mode, onClose, onSubmit, users }) {
     }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const nextUser = {
@@ -553,14 +554,22 @@ function UserModal({ eyebrow, initialUser, mode, onClose, onSubmit, users }) {
       return;
     }
 
-    onSubmit(nextUser);
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit(nextUser);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <ModalFrame
       eyebrow={eyebrow}
       onClose={onClose}
-      subtitle="Create or update a student or teacher account. These values are stored in React state and used immediately by the dashboard."
+      subtitle="Create or update a student or teacher account. Changes are saved immediately to the backend and reflected across the dashboard."
       title={mode === 'edit' ? 'Edit account' : 'Create account'}
     >
       <form className="modal-form" onSubmit={handleSubmit}>
@@ -635,7 +644,7 @@ function UserModal({ eyebrow, initialUser, mode, onClose, onSubmit, users }) {
           <button className="ghost-button compact" type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary-button compact" type="submit">
+          <button className="primary-button compact" disabled={isSubmitting} type="submit">
             {mode === 'edit' ? 'Save Changes' : 'Create Account'}
           </button>
         </div>
@@ -647,6 +656,7 @@ function UserModal({ eyebrow, initialUser, mode, onClose, onSubmit, users }) {
 function ClassModal({ classes, eyebrow, initialClass, mode, onClose, onSubmit, teachers }) {
   const [formData, setFormData] = useState(getClassFormValues(initialClass));
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = (event) => {
     const { name, value } = event.target;
@@ -657,7 +667,7 @@ function ClassModal({ classes, eyebrow, initialClass, mode, onClose, onSubmit, t
     }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const nextClass = {
@@ -690,7 +700,15 @@ function ClassModal({ classes, eyebrow, initialClass, mode, onClose, onSubmit, t
       return;
     }
 
-    onSubmit(nextClass);
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit(nextClass);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -782,7 +800,7 @@ function ClassModal({ classes, eyebrow, initialClass, mode, onClose, onSubmit, t
           <button className="ghost-button compact" type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary-button compact" type="submit">
+          <button className="primary-button compact" disabled={isSubmitting} type="submit">
             {mode === 'edit' ? 'Save Changes' : 'Create Class'}
           </button>
         </div>

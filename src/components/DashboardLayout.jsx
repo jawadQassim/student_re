@@ -84,7 +84,7 @@ function getAdminDashboardConfig(users, classes) {
       ? `${unassignedClasses} classes still need a teacher`
       : 'All current classes are staffed',
     stats: [
-      { label: 'Total Students', value: String(studentCount), trend: 'Students currently stored in state' },
+      { label: 'Total Students', value: String(studentCount), trend: 'Student records currently in the system' },
       { label: 'Total Teachers', value: String(teacherCount), trend: 'Teacher profiles ready to manage' },
       { label: 'Classes and Subjects', value: String(classes.length), trend: 'Sections active across the school' },
       { label: 'Unassigned Classes', value: String(unassignedClasses), trend: 'Classes waiting for a teacher' },
@@ -96,7 +96,11 @@ function getAdminDashboardConfig(users, classes) {
 function getTeacherDashboardConfig(user, classes, grades, scheduleEntries) {
   const teacherClasses = classes.filter((classItem) => classItem.teacherId === user.id);
   const assignedStudentCount = new Set(
-    teacherClasses.flatMap((classItem) => classItem.studentIds ?? []),
+    teacherClasses.flatMap((classItem) =>
+      classItem.students?.length
+        ? classItem.students.map((student) => student.id)
+        : classItem.studentIds ?? [],
+    ),
   ).size;
   const teacherGrades = grades.filter((grade) => grade.teacherId === user.id);
   const teacherSchedule = scheduleEntries.filter((entry) => entry.teacherId === user.id);
@@ -116,7 +120,7 @@ function getTeacherDashboardConfig(user, classes, grades, scheduleEntries) {
       : 'Add your first timetable block',
     stats: [
       { label: 'Assigned Students', value: String(assignedStudentCount), trend: 'Students linked to your classes' },
-      { label: 'Grades Given', value: String(teacherGrades.length), trend: 'Assessment records stored in state' },
+      { label: 'Grades Given', value: String(teacherGrades.length), trend: 'Assessment records currently logged' },
       { label: 'Weekly Timetable Slots', value: String(teacherSchedule.length), trend: 'Schedule blocks you currently manage' },
       { label: 'Subjects Taught', value: String(taughtSubjects), trend: `${teacherClasses.length} assigned class sections` },
     ],
@@ -164,7 +168,7 @@ function getRoleNotifications(user, users, classes, grades, scheduleEntries, pro
       {
         id: 'admin-alert-1',
         title: `${studentCount} student records are active`,
-        detail: 'Directory totals refreshed from the current app state.',
+        detail: 'Directory totals refreshed from the live backend data.',
       },
       {
         id: 'admin-alert-2',
@@ -190,7 +194,7 @@ function getRoleNotifications(user, users, classes, grades, scheduleEntries, pro
       {
         id: 'teacher-alert-1',
         title: `${teacherGrades.length} grade entries logged`,
-        detail: 'Your gradebook is up to date with the current state.',
+        detail: 'Your gradebook is up to date with the latest backend records.',
       },
       {
         id: 'teacher-alert-2',
@@ -320,9 +324,23 @@ function DashboardLoadingState() {
   );
 }
 
+function DashboardErrorState({ message }) {
+  return (
+    <div className="content-area page-reveal">
+      <section className="hero-card">
+        <div>
+          <span className="eyebrow">Data error</span>
+          <h2>We couldn&apos;t load this dashboard</h2>
+          <p>{message}</p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function DashboardLayout() {
   const { user, logout } = useAuth();
-  const { users, classes, grades, scheduleEntries, projects } = useSchoolData();
+  const { users, classes, grades, scheduleEntries, projects, isLoading, error } = useSchoolData();
   const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -470,7 +488,9 @@ function DashboardLayout() {
           </div>
         </header>
 
-        {isPageLoading ? (
+        {error ? (
+          <DashboardErrorState message={error.message ?? 'Please try refreshing the page.'} />
+        ) : isPageLoading || isLoading ? (
           <DashboardLoadingState />
         ) : (
           <main className="content-area page-reveal">

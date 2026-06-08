@@ -43,7 +43,7 @@ function ConfirmationModal({
   message,
   onClose,
   onConfirm,
-  subtitle = 'Please confirm before removing this record from the live app state.',
+  subtitle = 'Please confirm before removing this record from the live system.',
   title,
 }) {
   return (

@@ -1,19 +1,19 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useSchoolData } from '../context/SchoolDataContext';
 import { getRoleHomePath } from '../data/roleRoutes';
 import { roleOrder } from '../data/demoUsers';
+import api, { getApiErrorMessage } from '../lib/api';
 
 const highlights = [
   'Role-based dashboards for administrators, teachers, and students.',
   'A streamlined sidebar and top navigation for everyday school workflows.',
-  'Dummy login powered by React context so the app feels realistic without a backend.',
+  'JWT-backed login and live school records powered by a real API.',
 ];
 
 function LoginPage() {
   const { login } = useAuth();
-  const { users } = useSchoolData();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: '',
@@ -22,8 +22,16 @@ function LoginPage() {
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const demoAccountsQuery = useQuery({
+    queryKey: ['auth', 'demo-accounts'],
+    queryFn: async () => {
+      const response = await api.get('/auth/demo-accounts');
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
   const demoAccounts = roleOrder
-    .map((role) => users.find((candidate) => candidate.role === role))
+    .map((role) => demoAccountsQuery.data?.find((candidate) => candidate.role === role))
     .filter(Boolean);
 
   const updateField = (event) => {
@@ -48,11 +56,7 @@ function LoginPage() {
     setError('');
     setIsSubmitting(true);
 
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, 350);
-    });
-
-    const result = login(formData);
+    const result = await login(formData);
 
     if (!result.success) {
       setError(result.error);
@@ -60,6 +64,7 @@ function LoginPage() {
       return;
     }
 
+    setIsSubmitting(false);
     navigate(getRoleHomePath(result.user.role), { replace: true });
   };
 
@@ -88,7 +93,7 @@ function LoginPage() {
           <div className="section-heading">
             <span className="eyebrow">Welcome back</span>
             <h2>Sign in to your dashboard</h2>
-            <p>Select a role and use one of the current demo accounts to enter the app.</p>
+            <p>Select a role and use one of the seeded demo accounts to enter the app.</p>
           </div>
 
           <form className="login-form" onSubmit={handleSubmit}>
@@ -139,8 +144,18 @@ function LoginPage() {
 
           <div className="section-heading compact">
             <span className="eyebrow">Demo credentials</span>
-            <p>Tap any card to auto-fill the form.</p>
+            <p>Tap any card to auto-fill the form with backend-seeded credentials.</p>
           </div>
+
+          {demoAccountsQuery.isLoading ? <p className="helper-text">Loading demo accounts...</p> : null}
+          {demoAccountsQuery.isError ? (
+            <p className="form-error">
+              {getApiErrorMessage(
+                demoAccountsQuery.error,
+                'Unable to load demo credentials right now.',
+              )}
+            </p>
+          ) : null}
 
           <div className="demo-grid">
             {demoAccounts.map((account) => (

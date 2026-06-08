@@ -9,25 +9,21 @@ function formatDate(dateValue) {
 }
 
 function StudentPanel({ activeSectionId, student }) {
-  const { users, classes, grades, projects } = useSchoolData();
+  const { classes, grades, projects } = useSchoolData();
 
-  const studentClasses = [...classes]
-    .filter((classItem) => (classItem.studentIds ?? []).includes(student.id))
-    .sort(
-      (firstClass, secondClass) =>
-        firstClass.subject.localeCompare(secondClass.subject) ||
-        firstClass.section.localeCompare(secondClass.section),
-    );
-  const studentGrades = [...grades]
-    .filter((grade) => grade.studentId === student.id)
-    .sort(
-      (firstGrade, secondGrade) =>
-        secondGrade.date.localeCompare(firstGrade.date) ||
-        firstGrade.subject.localeCompare(secondGrade.subject),
-    );
-  const studentProjects = [...projects]
-    .filter((project) => project.studentId === student.id)
-    .sort((firstProject, secondProject) => firstProject.dueDate.localeCompare(secondProject.dueDate));
+  const studentClasses = [...classes].sort(
+    (firstClass, secondClass) =>
+      firstClass.subject.localeCompare(secondClass.subject) ||
+      firstClass.section.localeCompare(secondClass.section),
+  );
+  const studentGrades = [...grades].sort(
+    (firstGrade, secondGrade) =>
+      secondGrade.date.localeCompare(firstGrade.date) ||
+      firstGrade.subject.localeCompare(secondGrade.subject),
+  );
+  const studentProjects = [...projects].sort((firstProject, secondProject) =>
+    firstProject.dueDate.localeCompare(secondProject.dueDate),
+  );
   const pendingProjects = studentProjects.filter(
     (project) => project.status.toLowerCase() === 'pending',
   );
@@ -37,9 +33,16 @@ function StudentPanel({ activeSectionId, student }) {
   const classLabel = studentClasses.length
     ? Array.from(new Set(studentClasses.map((classItem) => classItem.section))).join(', ')
     : student.title;
+  const teacherNames = new Map([
+    ...studentClasses
+      .filter((classItem) => classItem.teacher)
+      .map((classItem) => [classItem.teacherId, classItem.teacher.name]),
+    ...studentGrades
+      .filter((grade) => grade.teacher)
+      .map((grade) => [grade.teacherId, grade.teacher.name]),
+  ]);
 
-  const getTeacherName = (teacherId) =>
-    users.find((candidate) => candidate.id === teacherId)?.name ?? 'Unassigned';
+  const getTeacherName = (teacherId) => teacherNames.get(teacherId) ?? 'Unassigned';
 
   const renderOverviewSection = () => (
     <section className="admin-panel">
@@ -91,7 +94,7 @@ function StudentPanel({ activeSectionId, student }) {
                   <div>
                     <strong>{grade.subject}</strong>
                     <p>
-                      {formatDate(grade.date)} | {getTeacherName(grade.teacherId)}
+                      {formatDate(grade.date)} | {grade.teacher?.name ?? getTeacherName(grade.teacherId)}
                     </p>
                   </div>
                   <span className="table-note">{grade.grade}</span>
@@ -170,7 +173,7 @@ function StudentPanel({ activeSectionId, student }) {
                     <td>{grade.subject}</td>
                     <td>{grade.grade}</td>
                     <td>{formatDate(grade.date)}</td>
-                    <td>{getTeacherName(grade.teacherId)}</td>
+                    <td>{grade.teacher?.name ?? getTeacherName(grade.teacherId)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -214,7 +217,7 @@ function StudentPanel({ activeSectionId, student }) {
                     <td>{classItem.section}</td>
                     <td>{classItem.schedule}</td>
                     <td>{classItem.room}</td>
-                    <td>{getTeacherName(classItem.teacherId)}</td>
+                    <td>{classItem.teacher?.name ?? getTeacherName(classItem.teacherId)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -327,7 +330,9 @@ function StudentPanel({ activeSectionId, student }) {
                       {classItem.schedule} | {classItem.room}
                     </p>
                   </div>
-                  <span className="table-note">{getTeacherName(classItem.teacherId)}</span>
+                  <span className="table-note">
+                    {classItem.teacher?.name ?? getTeacherName(classItem.teacherId)}
+                  </span>
                 </div>
               ))
             ) : (

@@ -67,7 +67,6 @@ function getScheduleFormValues(initialEntry) {
 
 function TeacherPanel({ activeSectionId, teacher }) {
   const {
-    users,
     classes,
     grades,
     scheduleEntries,
@@ -88,20 +87,22 @@ function TeacherPanel({ activeSectionId, teacher }) {
         firstClass.subject.localeCompare(secondClass.subject) ||
         firstClass.section.localeCompare(secondClass.section),
     );
-  const assignedStudentIds = Array.from(
-    new Set(teacherClasses.flatMap((classItem) => classItem.studentIds ?? [])),
-  );
-  const assignedStudents = assignedStudentIds
-    .map((studentId) => users.find((candidate) => candidate.id === studentId))
-    .filter(Boolean)
-    .sort((firstStudent, secondStudent) => firstStudent.name.localeCompare(secondStudent.name));
+  const assignedStudents = Array.from(
+    teacherClasses.reduce((studentMap, classItem) => {
+      (classItem.students ?? []).forEach((student) => {
+        studentMap.set(student.id, student);
+      });
+
+      return studentMap;
+    }, new Map()).values(),
+  ).sort((firstStudent, secondStudent) => firstStudent.name.localeCompare(secondStudent.name));
   const teacherGrades = [...grades]
     .filter((grade) => grade.teacherId === teacher.id)
     .sort(
       (firstGrade, secondGrade) =>
         secondGrade.date.localeCompare(firstGrade.date) ||
-        getStudentNameFromUsers(users, firstGrade.studentId).localeCompare(
-          getStudentNameFromUsers(users, secondGrade.studentId),
+        (firstGrade.student?.name ?? 'Unknown Student').localeCompare(
+          secondGrade.student?.name ?? 'Unknown Student',
         ),
     );
   const teacherSchedule = [...scheduleEntries]
@@ -154,31 +155,31 @@ function TeacherPanel({ activeSectionId, teacher }) {
     });
   };
 
-  const handleSaveGrade = (formData) => {
+  const handleSaveGrade = async (formData) => {
     const nextGrade = {
       ...formData,
       teacherId: teacher.id,
     };
 
     if (gradeModalState?.mode === 'edit' && gradeModalState.grade) {
-      updateGrade(gradeModalState.grade.id, nextGrade);
+      await updateGrade(gradeModalState.grade.id, nextGrade);
     } else {
-      createGrade(nextGrade);
+      await createGrade(nextGrade);
     }
 
     setGradeModalState(null);
   };
 
-  const handleSaveScheduleEntry = (formData) => {
+  const handleSaveScheduleEntry = async (formData) => {
     const nextEntry = {
       ...formData,
       teacherId: teacher.id,
     };
 
     if (scheduleModalState?.mode === 'edit' && scheduleModalState.entry) {
-      updateScheduleEntry(scheduleModalState.entry.id, nextEntry);
+      await updateScheduleEntry(scheduleModalState.entry.id, nextEntry);
     } else {
-      createScheduleEntry(nextEntry);
+      await createScheduleEntry(nextEntry);
     }
 
     setScheduleModalState(null);
@@ -187,10 +188,10 @@ function TeacherPanel({ activeSectionId, teacher }) {
   const requestDeleteScheduleEntry = (entry) => {
     setConfirmationState({
       title: 'Delete timetable slot',
-      message: `Remove ${entry.subject} from ${entry.day} at ${entry.time}? This change updates the live teacher schedule state immediately.`,
+      message: `Remove ${entry.subject} from ${entry.day} at ${entry.time}? This change updates your saved timetable immediately.`,
       confirmLabel: 'Delete slot',
-      onConfirm: () => {
-        deleteScheduleEntry(entry.id);
+      onConfirm: async () => {
+        await deleteScheduleEntry(entry.id);
         setConfirmationState(null);
       },
     });
@@ -427,7 +428,7 @@ function TeacherPanel({ activeSectionId, teacher }) {
               <tbody>
                 {teacherGrades.map((grade) => (
                   <tr key={grade.id}>
-                    <td>{getStudentNameFromUsers(users, grade.studentId)}</td>
+                    <td>{grade.student?.name ?? 'Unknown Student'}</td>
                     <td>{grade.subject}</td>
                     <td>{grade.grade}</td>
                     <td>{formatDate(grade.date)}</td>
@@ -675,6 +676,7 @@ function GradeModal({
 }) {
   const [formData, setFormData] = useState(getGradeFormValues(initialGrade, presetValues));
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = (event) => {
     const { name, value } = event.target;
@@ -685,7 +687,7 @@ function GradeModal({
     }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const nextGrade = {
@@ -700,7 +702,15 @@ function GradeModal({
       return;
     }
 
-    onSubmit(nextGrade);
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit(nextGrade);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -770,7 +780,7 @@ function GradeModal({
           <button className="ghost-button compact" type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary-button compact" type="submit">
+          <button className="primary-button compact" disabled={isSubmitting} type="submit">
             {mode === 'edit' ? 'Save Grade' : 'Add Grade'}
           </button>
         </div>
@@ -782,6 +792,7 @@ function GradeModal({
 function ScheduleModal({ eyebrow, initialEntry, mode, onClose, onSubmit, scheduleEntries }) {
   const [formData, setFormData] = useState(getScheduleFormValues(initialEntry));
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = (event) => {
     const { name, value } = event.target;
@@ -792,7 +803,7 @@ function ScheduleModal({ eyebrow, initialEntry, mode, onClose, onSubmit, schedul
     }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const nextEntry = {
@@ -818,7 +829,15 @@ function ScheduleModal({ eyebrow, initialEntry, mode, onClose, onSubmit, schedul
       return;
     }
 
-    onSubmit(nextEntry);
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit(nextEntry);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -870,17 +889,13 @@ function ScheduleModal({ eyebrow, initialEntry, mode, onClose, onSubmit, schedul
           <button className="ghost-button compact" type="button" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary-button compact" type="submit">
+          <button className="primary-button compact" disabled={isSubmitting} type="submit">
             {mode === 'edit' ? 'Save Slot' : 'Add Slot'}
           </button>
         </div>
       </form>
     </ModalFrame>
   );
-}
-
-function getStudentNameFromUsers(users, studentId) {
-  return users.find((candidate) => candidate.id === studentId)?.name ?? 'Unknown Student';
 }
 
 export default TeacherPanel;

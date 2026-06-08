@@ -1,77 +1,112 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useSchoolData } from './SchoolDataContext';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import api, { clearStoredAuth, getApiErrorMessage, getStoredAuth, persistAuth } from '../lib/api';
 
 const AuthContext = createContext(null);
-const AUTH_STORAGE_KEY = 'school-management-active-user';
-
-function getStoredUserId() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return window.localStorage.getItem(AUTH_STORAGE_KEY);
-}
 
 export function AuthProvider({ children }) {
-  const { users } = useSchoolData();
-  const [activeUserId, setActiveUserId] = useState(getStoredUserId);
-  const user = users.find((candidate) => candidate.id === activeUserId) ?? null;
+  const queryClient = useQueryClient();
+  const [authState, setAuthState] = useState(getStoredAuth);
+  const token = authState?.token ?? null;
+  const storedUser = authState?.user ?? null;
+
+  const meQuery = useQuery({
+    queryKey: ['auth', 'me', token],
+    queryFn: async () => {
+      const response = await api.get('/auth/me');
+      return response.data.user;
+    },
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const loginMutation = useMutation({
+    mutationFn: async (credentials) => {
+      const response = await api.post('/auth/login', credentials);
+      return response.data;
+    },
+  });
 
   useEffect(() => {
-    if (!activeUserId) {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (!authState) {
+      clearStoredAuth();
       return;
     }
 
-    if (!user) {
-      setActiveUserId(null);
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    persistAuth(authState);
+  }, [authState]);
+
+  useEffect(() => {
+    if (!meQuery.data || !authState) {
       return;
     }
 
-    window.localStorage.setItem(AUTH_STORAGE_KEY, activeUserId);
-  }, [activeUserId, user]);
+    setAuthState((currentAuthState) => {
+      if (!currentAuthState) {
+        return currentAuthState;
+      }
 
-  const login = ({ username, password, role }) => {
-    const normalizedUsername = username.trim().toLowerCase();
-    const account = users.find(
-      (candidate) =>
-        candidate.role === role &&
-        candidate.username.toLowerCase() === normalizedUsername &&
-        candidate.password === password,
-    );
+      return {
+        ...currentAuthState,
+        user: meQuery.data,
+      };
+    });
+  }, [authState, meQuery.data]);
 
-    if (!account) {
+  useEffect(() => {
+    if (!token || !meQuery.isError) {
+      return;
+    }
+
+    clearStoredAuth();
+    setAuthState(null);
+    queryClient.clear();
+  }, [meQuery.isError, queryClient, token]);
+
+  const login = async (credentials) => {
+    try {
+      const nextAuthState = await loginMutation.mutateAsync({
+        ...credentials,
+        username: credentials.username.trim(),
+      });
+
+      setAuthState(nextAuthState);
+      persistAuth(nextAuthState);
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+
+      return {
+        success: true,
+        user: nextAuthState.user,
+      };
+    } catch (error) {
       return {
         success: false,
-        error: 'Credentials do not match the selected role. Try one of the demo accounts below.',
+        error: getApiErrorMessage(
+          error,
+          'Unable to sign in right now. Please check your credentials and try again.',
+        ),
       };
     }
-
-    setActiveUserId(account.id);
-    return {
-      success: true,
-      user: account,
-    };
   };
 
   const logout = () => {
-    setActiveUserId(null);
+    clearStoredAuth();
+    setAuthState(null);
+    queryClient.clear();
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        login,
-        logout,
-        activeUserId,
-        isAuthenticated: Boolean(user),
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = {
+    user: meQuery.data ?? storedUser,
+    login,
+    logout,
+    token,
+    isAuthenticated: Boolean(token && (meQuery.data ?? storedUser)),
+    isAuthLoading: Boolean(token) && meQuery.isLoading,
+    isLoginPending: loginMutation.isPending,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
